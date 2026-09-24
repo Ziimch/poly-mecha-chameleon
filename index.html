@@ -2,55 +2,61 @@
 <html lang="id">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-  <title>Poly Mecha Chameleon FPS</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <title>Poly Mecha Chameleon FPS — V2.1</title>
   <link rel="stylesheet" href="style.css">
-  <script type="importmap">
-  {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.181.2/build/three.module.js"}}
-  </script>
+  <script src="config.js"></script>
 </head>
 <body>
+  <div id="game"></div>
+
   <div id="menu" class="panel">
     <h1>POLY MECHA CHAMELEON</h1>
-    <p class="sub">Multiplayer FPS • Guest Mode</p>
-    <input id="nameInput" maxlength="16" placeholder="Nama guest" value="">
-    <div class="row">
-      <select id="roomInput"><option value="default">Room: Default</option><option value="arena">Room: Arena</option><option value="training">Room: Training</option></select>
-      <select id="modeInput"><option value="tdm">Team Deathmatch</option><option value="ffa">Free For All</option><option value="survival">Survival</option></select>
-    </div>
-    <div class="row">
-      <button id="playBtn">PLAY AS GUEST</button>
-      <button id="helpBtn">CONTROLS</button>
-    </div>
-    <div id="help" class="small hidden">Desktop: WASD + mouse, klik untuk menembak, R reload, G grenade, Q ability.<br>Mobile: joystick kiri untuk bergerak, drag kanan untuk melihat, FIRE untuk menembak, tombol R/G/Q untuk aksi.</div>
-    <p id="status" class="small">Server: belum terhubung</p>
+    <p>Multiplayer FPS • Guest Mode • V2.1 Diagnostics</p>
+    <input id="guestName" maxlength="16" placeholder="Nama guest" autocomplete="off">
+    <select id="room">
+      <option value="default">Room: Default</option>
+      <option value="arena">Room: Arena</option>
+      <option value="training">Room: Training</option>
+    </select>
+    <select id="mode">
+      <option value="tdm">Team Deathmatch</option>
+      <option value="ffa">Free For All</option>
+      <option value="survival">Survival</option>
+    </select>
+    <button id="play">PLAY AS GUEST</button>
+    <button id="controls">CONTROLS</button>
+    <div id="status" class="status">Server: belum terhubung</div>
+    <div id="diag" class="diag"></div>
   </div>
 
-  <div id="hud" class="hidden">
-    <div class="top">
-      <div><b id="roomLabel">ROOM</b> · <span id="modeLabel">MODE</span></div>
-      <div>Players: <span id="playerCount">0</span></div>
+  <div id="hud" hidden>
+    <div class="topbar">
+      <span id="hp">HP 100</span>
+      <span id="ammo">AMMO 30/120</span>
+      <span id="roomLabel">ROOM default</span>
     </div>
-    <div id="hpBar"><span id="hpFill"></span></div>
-    <div id="hpText">HP 100</div>
-    <div id="ammo">30 / 120</div>
-    <div id="weapon">RIFLE</div>
-    <div id="scoreboard" class="scoreboard hidden"></div>
-    <div id="killfeed"></div>
-    <div id="hitmarker">×</div>
     <div id="crosshair">+</div>
+    <div id="feed"></div>
+    <div id="scoreboard"></div>
+    <div id="diagHud" class="diag huddiag"></div>
 
     <div id="mobile">
-      <div id="joyBase"><div id="joyKnob"></div></div>
-      <div id="lookArea"></div>
+      <div id="joystick"><div id="stick"></div></div>
+      <div id="lookZone"></div>
       <button id="fire">FIRE</button>
       <button id="reload">R</button>
       <button id="grenade">G</button>
-      <button id="ability">Q</button>
-      <button id="scoreBtn">TAB</button>
     </div>
   </div>
-  <script src="config.js"></script>
+
+  <div id="help" class="panel small" hidden>
+    <h2>Controls</h2>
+    <p>PC: WASD • Mouse look • Click shoot • R reload • G grenade • Tab scoreboard</p>
+    <p>Mobile: joystick kiri untuk bergerak • geser area kanan untuk melihat • FIRE untuk menembak</p>
+    <button id="closeHelp">CLOSE</button>
+  </div>
+
   <script type="module" src="game.js"></script>
 </body>
 </html>
