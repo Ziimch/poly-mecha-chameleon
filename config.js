@@ -1,1 +1,1 @@
-window.GAME_SERVER_URL = "wss://YOUR_WORKER.YOUR_SUBDOMAIN.workers.dev";
+window.GAME_SERVER_URL = "poly-mecha-chameleon.teanppu.workers.dev";
