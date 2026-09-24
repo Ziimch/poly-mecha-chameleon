@@ -1,13 +1,22 @@
 {
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "poly-mecha-chameleon-server",
   "main": "src/index.js",
   "compatibility_date": "2026-09-24",
   "durable_objects": {
     "bindings": [
-      {"name":"GAME_ROOMS","class_name":"GameRoom"}
+      {
+        "name": "GAME_ROOMS",
+        "class_name": "GameRoom"
+      }
     ]
   },
   "migrations": [
-    {"tag":"v2","new_sqlite_classes":["GameRoom"]}
+    {
+      "tag": "v2-1",
+      "new_sqlite_classes": [
+        "GameRoom"
+      ]
+    }
   ]
 }
