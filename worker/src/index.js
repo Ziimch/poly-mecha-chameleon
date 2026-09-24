@@ -1,66 +1,198 @@
-export class GameRoom {
-  constructor(state, env) {
-    this.state = state; this.env = env;
-    this.clients = new Map();
-    this.players = new Map();
-    this.lastSnapshot = 0;
-    this.state.blockConcurrencyWhile(async()=>{ this.state.storage.sql.exec(`CREATE TABLE IF NOT EXISTS players (id TEXT PRIMARY KEY, name TEXT, kills INTEGER DEFAULT 0, deaths INTEGER DEFAULT 0, skin TEXT, last_seen INTEGER)`); });
-  }
-  async fetch(req) {
-    if(req.headers.get("Upgrade") !== "websocket") return Response.json({ok:true,room:this.state.id.toString(),players:this.players.size,guestMode:true});
-    const pair = new WebSocketPair(); const [client,server] = Object.values(pair);
-    server.accept(); const id=crypto.randomUUID(); const url=new URL(req.url);
-    this.clients.set(id,server);
-    this.players.set(id,{id,name:"Guest",x:0,z:8,r:0,hp:100,maxHp:100,ammo:30,reserve:120,kills:0,deaths:0,skin:"chameleon",team:"A",parts:{head:100,body:150,leftArm:80,rightArm:80,leftLeg:100,rightLeg:100}});
-    server.addEventListener("message",e=>this.onMessage(id,e.data));
-    server.addEventListener("close",()=>{this.clients.delete(id);this.players.delete(id);this.broadcast({type:"snapshot",players:this.publicPlayers()});});
-    this.send(id,{type:"welcome",id,room:url.searchParams.get("room")||"default",mode:url.searchParams.get("mode")||"tdm"});
-    this.send(id,{type:"state",hp:100,ammo:30,reserve:120});
-    return new Response(null,{status:101,webSocket:client});
-  }
-  send(id,msg){const s=this.clients.get(id);if(s)try{s.send(JSON.stringify(msg))}catch{}}
-  broadcast(msg){const raw=JSON.stringify(msg);for(const s of this.clients.values())try{s.send(raw)}catch{}}
-  publicPlayers(){const o={};for(const [id,p] of this.players)o[id]={id,name:p.name,x:p.x,z:p.z,r:p.r,hp:p.hp,skin:p.skin,team:p.team,color:p.team==="A"?0x49d5b1:0xff6b6b,kills:p.kills,deaths:p.deaths};return o}
-  onMessage(id,data){
-    let m;try{m=JSON.parse(data)}catch{return};const p=this.players.get(id);if(!p)return;
-    if(m.type==="join"){p.name=String(m.name||"Guest").slice(0,16);p.room=String(m.room||"default").slice(0,24);p.mode=["tdm","ffa","survival"].includes(m.mode)?m.mode:"tdm";p.team=p.mode==="ffa"?"FFA":(this.players.size%2?"A":"B");this.send(id,{type:"welcome",id,room:p.room,mode:p.mode});this.broadcast({type:"snapshot",players:this.publicPlayers()});return}
-    if(m.type==="move"){const nx=Number(m.x),nz=Number(m.z);if(!Number.isFinite(nx)||!Number.isFinite(nz))return;if(Math.abs(nx-p.x)>1.2||Math.abs(nz-p.z)>1.2)return;p.x=Math.max(-36,Math.min(36,nx));p.z=Math.max(-36,Math.min(36,nz));p.r=Number(m.r)||0;this.throttledSnapshot();return}
-    if(m.type==="reload"){p.ammo=30;this.send(id,{type:"state",hp:p.hp,ammo:p.ammo,reserve:p.reserve});return}
-    if(m.type==="shoot"){this.shoot(id,m);return}
-    if(m.type==="grenade"){this.grenade(id,m);return}
-    if(m.type==="ability"){this.send(id,{type:"ability",ok:true,ability:m.ability});return}
-    if(m.type==="scoreboard"){this.send(id,{type:"scoreboard",players:[...this.players.values()].map(q=>({id:q.id,name:q.name,kills:q.kills,deaths:q.deaths,team:q.team}))});}
-  }
-  throttledSnapshot(){const n=Date.now();if(n-this.lastSnapshot<50)return;this.lastSnapshot=n;this.broadcast({type:"snapshot",players:this.publicPlayers()})}
-  shoot(id,m){
-    const p=this.players.get(id);if(!p||p.ammo<=0)return;p.ammo--;
-    const ox=Number(m.origin?.x),oz=Number(m.origin?.z),dx=Number(m.dir?.[0]),dz=Number(m.dir?.[2]);if(![ox,oz,dx,dz].every(Number.isFinite))return;
-    let best=null,bestDist=999;
-    for(const [tid,t] of this.players){if(tid===id||t.hp<=0)continue;if(p.mode==="tdm"&&p.team===t.team)continue;
-      const vx=t.x-ox,vz=t.z-oz,proj=vx*dx+vz*dz;if(proj<0||proj>60)continue;const px=ox+dx*proj,pz=oz+dz*proj;const dist=Math.hypot(t.x-px,t.z-pz);if(dist>.75)continue;
-      if(proj<bestDist){bestDist=proj;best={id:tid,p:t}}
-    }
-    if(best){const head=Math.random()<.18;const damage=head?60:25;best.p.hp=Math.max(0,best.p.hp-damage);this.send(id,{type:"hit",target:best.id,damage,headshot:head});this.send(best.id,{type:"hit",target:best.id,damage,headshot:head});if(best.p.hp<=0)this.kill(id,best.id,head)}
-    this.send(id,{type:"state",hp:p.hp,ammo:p.ammo,reserve:p.reserve});
-  }
-  kill(killerId,victimId,headshot){
-    const k=this.players.get(killerId),v=this.players.get(victimId);if(!k||!v)return;k.kills++;v.deaths++;this.broadcast({type:"kill",killerName:k.name,victimName:v.name,headshot});
-    setTimeout(()=>{if(!this.players.has(victimId))return;v.hp=100;v.ammo=30;v.reserve=120;v.x=(Math.random()-.5)*20;v.z=(Math.random()-.5)*20;this.send(victimId,{type:"respawn",hp:100,x:v.x,z:v.z});this.broadcast({type:"snapshot",players:this.publicPlayers()})},1200);
-  }
-  grenade(id,m){
-    const p=this.players.get(id);if(!p)return;const dx=Number(m.dir?.[0])||0,dz=Number(m.dir?.[2])||1;const x=p.x+dx*6,z=p.z+dz*6;this.broadcast({type:"grenade",x,z});
-    for(const [tid,t] of this.players){if(tid===id||t.hp<=0)continue;const d=Math.hypot(t.x-x,t.z-z);if(d<4){t.hp=Math.max(0,t.hp-Math.round(70*(1-d/4)));this.send(tid,{type:"state",hp:t.hp,ammo:t.ammo,reserve:t.reserve})}}
-  }
+import { DurableObject } from "cloudflare:workers";
+
+const COLORS = [0x39a9ff,0xff6b5e,0x65d889,0xf6c85f,0xb07cff,0xff8f3d];
+
+function json(data,status=200){
+  return new Response(JSON.stringify(data),{
+    status,
+    headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}
+  });
 }
+function clamp(n,a,b){return Math.max(a,Math.min(b,Number(n)||0));}
 
 export default {
-  async fetch(request,env) {
+  async fetch(request, env) {
     const url=new URL(request.url);
-    if(url.pathname==="/ws" && request.headers.get("Upgrade")==="websocket"){
-      const room=(url.searchParams.get("room")||"default").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,32)||"default";
-      const id=env.GAME_ROOMS.idFromName(room);
-      return env.GAME_ROOMS.get(id).fetch(request);
+    if(url.pathname==="/health" || url.pathname==="/"){
+      return json({
+        ok:true,
+        game:"Poly Mecha Chameleon FPS",
+        version:"2.1",
+        guestMode:true,
+        websocket:"/ws",
+        endpoint:"/ws?room=default&mode=tdm"
+      });
     }
-    return Response.json({ok:true,game:"Poly Mecha Chameleon FPS",guestMode:true,endpoint:"/ws?room=default&mode=tdm"});
+    if(url.pathname!=="/ws"){
+      return json({ok:false,error:"Not found",hint:"Use /ws for WebSocket or / for health"},404);
+    }
+    if(request.method!=="GET"){
+      return new Response("Expected GET",{status:400});
+    }
+    const upgrade=request.headers.get("Upgrade");
+    if(!upgrade || upgrade.toLowerCase()!=="websocket"){
+      return json({
+        ok:false,
+        error:"WebSocket upgrade required",
+        hint:"Open / in a browser to test HTTP health."
+      },426);
+    }
+
+    const room=(url.searchParams.get("room")||"default").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,32)||"default";
+    const id=env.GAME_ROOMS.idFromName(room);
+    const stub=env.GAME_ROOMS.get(id);
+    return stub.fetch(request);
+  }
+};
+
+export class GameRoom extends DurableObject {
+  constructor(ctx,env){
+    super(ctx,env);
+    this.ctx=ctx;
+    this.env=env;
+    this.sessions=new Map();
+    for(const ws of this.ctx.getWebSockets()){
+      const a=ws.deserializeAttachment();
+      if(a?.id) this.sessions.set(ws,a);
+    }
+  }
+
+  async fetch(request){
+    const upgrade=request.headers.get("Upgrade");
+    if(!upgrade || upgrade.toLowerCase()!=="websocket"){
+      return new Response("Expected WebSocket upgrade",{status:426});
+    }
+
+    const url=new URL(request.url);
+    const room=(url.searchParams.get("room")||"default").slice(0,32);
+    const mode=(url.searchParams.get("mode")||"tdm").slice(0,20);
+
+    const pair=new WebSocketPair();
+    const [client,server]=Object.values(pair);
+    this.ctx.acceptWebSocket(server);
+
+    const id=crypto.randomUUID();
+    const p={
+      id,name:"Guest",room,mode,color:COLORS[Math.floor(Math.random()*COLORS.length)],
+      x:0,z:8,ry:0,hp:100,
+      body:{head:100,body:150,leftArm:80,rightArm:80,leftLeg:100,rightLeg:100},
+      kills:0,deaths:0,ammo:30,reserve:120
+    };
+    this.sessions.set(server,p);
+    server.serializeAttachment({id});
+    server.send(JSON.stringify({type:"welcome",id,hp:100,ammo:30,reserve:120,serverVersion:"2.1"}));
+    this.broadcastSnapshot();
+    return new Response(null,{status:101,webSocket:client});
+  }
+
+  webSocketMessage(ws,message){
+    const p=this.sessions.get(ws);
+    if(!p) return;
+    let m;
+    try{m=JSON.parse(message)}catch{return}
+    if(m.type==="join"){
+      p.name=String(m.name||"Guest").slice(0,16);
+      p.room=String(m.room||p.room).slice(0,32);
+      p.mode=String(m.mode||p.mode).slice(0,20);
+      this.broadcast({type:"state",id:p.id,hp:p.hp,ammo:p.ammo,reserve:p.reserve});
+      this.broadcastSnapshot();
+      return;
+    }
+    if(m.type==="move"){
+      const dx=clamp(m.x,-90,90), dz=clamp(m.z,-90,90);
+      p.x=dx;p.z=dz;p.ry=Number(m.ry)||0;
+      this.broadcastSnapshot();
+      return;
+    }
+    if(m.type==="reload"){
+      const need=30-p.ammo, n=Math.min(need,p.reserve);
+      p.ammo+=n;p.reserve-=n;
+      this.sendState(p);return;
+    }
+    if(m.type==="grenade"){
+      this.broadcast({type:"grenade",id:p.id,x:p.x,z:p.z});
+      return;
+    }
+    if(m.type==="shoot"){
+      if(p.ammo<=0)return;
+      p.ammo--;
+      this.sendState(p);
+      const hit=this.findHit(p,m.origin,m.dir);
+      if(hit){
+        const target=hit.player;
+        const part=hit.part;
+        const damage=part==="head"?60:part==="body"?25:15;
+        target.hp=Math.max(0,target.hp-damage);
+        if(target.body[part]!=null) target.body[part]=Math.max(0,target.body[part]-damage);
+        this.sendTo(target,{type:"state",id:target.id,hp:target.hp,ammo:target.ammo,reserve:target.reserve});
+        this.sendTo(p,{type:"hit",targetId:target.id,part,damage});
+        if(target.hp<=0){
+          p.kills++;target.deaths++;
+          this.broadcast({type:"kill",killerId:p.id,killerName:p.name,victimId:target.id,victimName:target.name,part});
+          target.hp=100;target.body={head:100,body:150,leftArm:80,rightArm:80,leftLeg:100,rightLeg:100};
+          target.x=(Math.random()-.5)*20;target.z=8+Math.random()*15;
+          setTimeout(()=>this.sendState(target),150);
+        }
+        this.broadcastSnapshot();
+      }
+      return;
+    }
+  }
+
+  findHit(shooter,origin,dir){
+    const ox=Number(origin?.x)||shooter.x, oy=Number(origin?.y)||1.7, oz=Number(origin?.z)||shooter.z;
+    let dx=Number(dir?.x)||0,dy=Number(dir?.y)||0,dz=Number(dir?.z)||-1;
+    const len=Math.hypot(dx,dy,dz)||1;dx/=len;dy/=len;dz/=len;
+    let best=null,bestT=Infinity;
+    for(const target of this.sessions.values()){
+      if(target.id===shooter.id || target.hp<=0) continue;
+      const tx=target.x,tz=target.z;
+      const parts=[
+        ["head",tx,1.85,tz,.38],
+        ["body",tx,1.05,tz,.58],
+        ["leftArm",tx-.35,1.0,tz,.28],
+        ["rightArm",tx+.35,1.0,tz,.28],
+        ["leftLeg",tx-.2,.45,tz,.3],
+        ["rightLeg",tx+.2,.45,tz,.3]
+      ];
+      for(const [part,cx,cy,cz,r] of parts){
+        const vx=cx-ox,vy=cy-oy,vz=cz-oz;
+        const t=vx*dx+vy*dy+vz*dz;
+        if(t<0 || t>45 || t>bestT) continue;
+        const px=ox+dx*t,py=oy+dy*t,pz=oz+dz*t;
+        const d2=(px-cx)**2+(py-cy)**2+(pz-cz)**2;
+        if(d2<=r*r){best={player:target,part};bestT=t;break;}
+      }
+    }
+    return best;
+  }
+
+  webSocketClose(ws){
+    this.sessions.delete(ws);
+    this.broadcastSnapshot();
+  }
+  webSocketError(ws){
+    this.sessions.delete(ws);
+    this.broadcastSnapshot();
+  }
+
+  sendTo(p,msg){
+    for(const [ws,info] of this.sessions){
+      if(info.id===p.id){
+        try{ws.send(JSON.stringify(msg))}catch{}
+      }
+    }
+  }
+  sendState(p){this.sendTo(p,{type:"state",id:p.id,hp:p.hp,ammo:p.ammo,reserve:p.reserve});}
+  broadcast(msg){
+    const raw=JSON.stringify(msg);
+    for(const ws of this.sessions.keys()){try{ws.send(raw)}catch{}}
+  }
+  broadcastSnapshot(){
+    const players=[...this.sessions.values()].map(p=>({
+      id:p.id,name:p.name,color:p.color,x:p.x,z:p.z,ry:p.ry,hp:p.hp,kills:p.kills,deaths:p.deaths
+    }));
+    const scores={};for(const p of this.sessions.values())scores[p.name]=p.kills;
+    this.broadcast({type:"snapshot",players,scores});
   }
 }
