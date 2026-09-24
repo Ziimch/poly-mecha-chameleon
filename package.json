@@ -1,0 +1,7 @@
+{
+  "name":"poly-mecha-chameleon-worker",
+  "private":true,
+  "version":"2.0.0",
+  "scripts":{"deploy":"wrangler deploy"},
+  "devDependencies":{"wrangler":"^4.0.0"}
+}
