@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Poly Mecha Chameleon FPS</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+  {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.181.2/build/three.module.js"}}
+  </script>
+</head>
+<body>
+  <div id="menu" class="panel">
+    <h1>POLY MECHA CHAMELEON</h1>
+    <p class="sub">Multiplayer FPS • Guest Mode</p>
+    <input id="nameInput" maxlength="16" placeholder="Nama guest" value="">
+    <div class="row">
+      <select id="roomInput"><option value="default">Room: Default</option><option value="arena">Room: Arena</option><option value="training">Room: Training</option></select>
+      <select id="modeInput"><option value="tdm">Team Deathmatch</option><option value="ffa">Free For All</option><option value="survival">Survival</option></select>
+    </div>
+    <div class="row">
+      <button id="playBtn">PLAY AS GUEST</button>
+      <button id="helpBtn">CONTROLS</button>
+    </div>
+    <div id="help" class="small hidden">Desktop: WASD + mouse, klik untuk menembak, R reload, G grenade, Q ability.<br>Mobile: joystick kiri untuk bergerak, drag kanan untuk melihat, FIRE untuk menembak, tombol R/G/Q untuk aksi.</div>
+    <p id="status" class="small">Server: belum terhubung</p>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div class="top">
+      <div><b id="roomLabel">ROOM</b> · <span id="modeLabel">MODE</span></div>
+      <div>Players: <span id="playerCount">0</span></div>
+    </div>
+    <div id="hpBar"><span id="hpFill"></span></div>
+    <div id="hpText">HP 100</div>
+    <div id="ammo">30 / 120</div>
+    <div id="weapon">RIFLE</div>
+    <div id="scoreboard" class="scoreboard hidden"></div>
+    <div id="killfeed"></div>
+    <div id="hitmarker">×</div>
+    <div id="crosshair">+</div>
+
+    <div id="mobile">
+      <div id="joyBase"><div id="joyKnob"></div></div>
+      <div id="lookArea"></div>
+      <button id="fire">FIRE</button>
+      <button id="reload">R</button>
+      <button id="grenade">G</button>
+      <button id="ability">Q</button>
+      <button id="scoreBtn">TAB</button>
+    </div>
+  </div>
+  <script src="config.js"></script>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
